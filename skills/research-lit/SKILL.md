@@ -17,18 +17,40 @@ Research topic: $ARGUMENTS
   3. Custom path specified by user in `CLAUDE.md` under `## Paper Library`
 - **MAX_LOCAL_PAPERS = 20** — Maximum number of local PDFs to scan (read first 3 pages each). If more are found, prioritize by filename relevance to the topic.
 
-> 💡 Override: `/research-lit "topic" — paper library: ~/Zotero/storage/`
+> 💡 Overrides:
+> - `/research-lit "topic" — paper library: ~/my_papers/` — custom local PDF path
+> - `/research-lit "topic" — sources: zotero, local` — only search Zotero + local PDFs
+> - `/research-lit "topic" — sources: zotero` — only search Zotero
+> - `/research-lit "topic" — sources: web` — only search the web (skip all local)
 
-## Data Sources (in priority order)
+## Data Sources
 
-This skill checks multiple sources. **All are optional** — if a source is not configured, skip it silently and move to the next.
+This skill checks multiple sources **in priority order**. All are optional — if a source is not configured or not requested, skip it silently.
 
-| Priority | Source | How to detect | What it provides |
-|----------|--------|---------------|-----------------|
-| 1 | **Zotero** (via MCP) | Try calling any `mcp__zotero__*` tool — if it fails or is not available, skip | Collections, tags, annotations, PDF highlights, BibTeX, semantic search |
-| 2 | **Obsidian** (via MCP) | Try calling any `mcp__obsidian-vault__*` tool — if it fails or is not available, skip | Research notes, paper summaries, tagged references, wikilinks |
-| 3 | **Local PDFs** | `Glob: papers/**/*.pdf, literature/**/*.pdf` | Raw PDF content (first 3 pages) |
-| 4 | **Web search** | Always available (WebSearch) | arXiv, Semantic Scholar, Google Scholar |
+### Source Selection
+
+Parse `$ARGUMENTS` for a `— sources:` directive:
+- **If `— sources:` is specified**: Only search the listed sources (comma-separated). Valid values: `zotero`, `obsidian`, `local`, `web`, `all`.
+- **If not specified**: Default to `all` — search every available source in priority order.
+
+Examples:
+```
+/research-lit "diffusion models"                        → all (default)
+/research-lit "diffusion models" — sources: all         → all
+/research-lit "diffusion models" — sources: zotero      → Zotero only
+/research-lit "diffusion models" — sources: zotero, web → Zotero + web
+/research-lit "diffusion models" — sources: local       → local PDFs only
+/research-lit "topic" — sources: obsidian, local, web   → skip Zotero
+```
+
+### Source Table
+
+| Priority | Source | ID | How to detect | What it provides |
+|----------|--------|----|---------------|-----------------|
+| 1 | **Zotero** (via MCP) | `zotero` | Try calling any `mcp__zotero__*` tool — if unavailable, skip | Collections, tags, annotations, PDF highlights, BibTeX, semantic search |
+| 2 | **Obsidian** (via MCP) | `obsidian` | Try calling any `mcp__obsidian-vault__*` tool — if unavailable, skip | Research notes, paper summaries, tagged references, wikilinks |
+| 3 | **Local PDFs** | `local` | `Glob: papers/**/*.pdf, literature/**/*.pdf` | Raw PDF content (first 3 pages) |
+| 4 | **Web search** | `web` | Always available (WebSearch) | arXiv, Semantic Scholar, Google Scholar |
 
 > **Graceful degradation**: If no MCP servers are configured, the skill works exactly as before (local PDFs + web search). Zotero and Obsidian are pure additions.
 

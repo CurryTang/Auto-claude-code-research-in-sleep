@@ -374,7 +374,8 @@ cp -r skills/research-lit ~/.claude/skills/
 ```
 # Workflow 1: Idea Discovery
 > /idea-discovery "your research direction"          # full pipeline
-> /research-lit "topic"                              # just literature survey
+> /research-lit "topic"                              # just literature survey (all sources)
+> /research-lit "topic" — sources: zotero, web        # mix and match sources
 > /idea-creator "topic"                              # just brainstorm
 
 # Workflow 2: Auto Research Loop

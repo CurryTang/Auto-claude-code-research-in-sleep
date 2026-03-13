@@ -115,7 +115,8 @@ claude
 > ⚙️ Pilot 实验预算（最大时长、超时、GPU 总预算）均可配置——见[自定义](#%EF%B8%8F-自定义)。
 
 ```
-1. /research-lit "discrete diffusion models"    ← 先读本地论文，再搜外部，整理全景
+1. /research-lit "discrete diffusion models"    ← Zotero→Obsidian→本地→网络，整理全景
+   /research-lit "topic" — sources: zotero, web  ← 或指定只搜部分源
 2. /idea-creator "DLLMs post training"     ← 自动生成 8-12 个 idea，筛选排序
 3. 选 top 2-3 个 idea
 4. /novelty-check "top idea"                     ← 查新：有没有人做过？
