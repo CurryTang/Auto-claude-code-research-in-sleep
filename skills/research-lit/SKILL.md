@@ -2,7 +2,7 @@
 name: research-lit
 description: Search and analyze research papers, find related work, summarize key ideas. Use when user says "find papers", "related work", "literature review", "what does this paper say", or needs to understand academic papers.
 argument-hint: [paper-topic-or-url]
-allowed-tools: Bash(*), Read, Glob, Grep, WebSearch, WebFetch, Write, Agent, mcp__zotero__*, mcp__obsidian-vault__*
+allowed-tools: Bash(*), Read, Glob, Grep, WebSearch, WebFetch, Write, Agent, mcp__auto-researcher__*, mcp__zotero__*, mcp__obsidian-vault__*
 ---
 
 # Research Literature Review
@@ -19,8 +19,9 @@ Research topic: $ARGUMENTS
 
 > 💡 Overrides:
 > - `/research-lit "topic" — paper library: ~/my_papers/` — custom local PDF path
-> - `/research-lit "topic" — sources: zotero, local` — only search Zotero + local PDFs
-> - `/research-lit "topic" — sources: zotero` — only search Zotero
+> - `/research-lit "topic" — sources: auto-researcher, local` — only search saved Auto Researcher papers + local PDFs
+> - `/research-lit "topic" — sources: auto-researcher` — only search the saved Auto Researcher paper library
+> - `/research-lit "topic" — sources: zotero` — compatibility alias for legacy setups
 > - `/research-lit "topic" — sources: web` — only search the web (skip all local)
 
 ## Data Sources
@@ -30,15 +31,16 @@ This skill checks multiple sources **in priority order**. All are optional — i
 ### Source Selection
 
 Parse `$ARGUMENTS` for a `— sources:` directive:
-- **If `— sources:` is specified**: Only search the listed sources (comma-separated). Valid values: `zotero`, `obsidian`, `local`, `web`, `all`.
+- **If `— sources:` is specified**: Only search the listed sources (comma-separated). Valid values: `auto-researcher`, `zotero`, `obsidian`, `local`, `web`, `all`.
 - **If not specified**: Default to `all` — search every available source in priority order.
 
 Examples:
 ```
 /research-lit "diffusion models"                        → all (default)
 /research-lit "diffusion models" — sources: all         → all
-/research-lit "diffusion models" — sources: zotero      → Zotero only
-/research-lit "diffusion models" — sources: zotero, web → Zotero + web
+/research-lit "diffusion models" — sources: auto-researcher      → Auto Researcher library only
+/research-lit "diffusion models" — sources: auto-researcher, web → Auto Researcher library + web
+/research-lit "diffusion models" — sources: zotero               → compatibility alias
 /research-lit "diffusion models" — sources: local       → local PDFs only
 /research-lit "topic" — sources: obsidian, local, web   → skip Zotero
 ```
@@ -47,32 +49,32 @@ Examples:
 
 | Priority | Source | ID | How to detect | What it provides |
 |----------|--------|----|---------------|-----------------|
-| 1 | **Zotero** (via MCP) | `zotero` | Try calling any `mcp__zotero__*` tool — if unavailable, skip | Collections, tags, annotations, PDF highlights, BibTeX, semantic search |
+| 1 | **Auto Researcher library** (via MCP) | `auto-researcher` | Try calling any `mcp__auto-researcher__*` tool; if unavailable, try `mcp__zotero__*` as compatibility alias | Saved papers, tags, processed notes, user notes, reading history, BibTeX |
 | 2 | **Obsidian** (via MCP) | `obsidian` | Try calling any `mcp__obsidian-vault__*` tool — if unavailable, skip | Research notes, paper summaries, tagged references, wikilinks |
 | 3 | **Local PDFs** | `local` | `Glob: papers/**/*.pdf, literature/**/*.pdf` | Raw PDF content (first 3 pages) |
 | 4 | **Web search** | `web` | Always available (WebSearch) | arXiv, Semantic Scholar, Google Scholar |
 
-> **Graceful degradation**: If no MCP servers are configured, the skill works exactly as before (local PDFs + web search). Zotero and Obsidian are pure additions.
+> **Graceful degradation**: If no MCP servers are configured, the skill works exactly as before (local PDFs + web search). Auto Researcher, Zotero, and Obsidian are pure additions.
 
 ## Workflow
 
-### Step 0a: Search Zotero Library (if available)
+### Step 0a: Search Auto Researcher Library (if available)
 
-**Skip this step entirely if Zotero MCP is not configured.**
+**Skip this step entirely if neither the Auto Researcher MCP server nor a Zotero-compatible alias is configured.**
 
-Try calling a Zotero MCP tool (e.g., search). If it succeeds:
+Try calling an Auto Researcher MCP tool first. If unavailable, try a Zotero-compatible tool name. If that succeeds:
 
-1. **Search by topic**: Use the Zotero search tool to find papers matching the research topic
-2. **Read collections**: Check if the user has a relevant collection/folder for this topic
-3. **Extract annotations**: For highly relevant papers, pull PDF highlights and notes — these represent what the user found important
+1. **Search by topic**: Search the saved paper library for papers matching the research topic
+2. **Read saved notes**: For highly relevant papers, pull processed notes, user notes, and reading history when available
+3. **Extract metadata**: Collect tags and other saved-library organization signals
 4. **Export BibTeX**: Get citation data for relevant papers (useful for `/paper-write` later)
-5. **Compile results**: For each relevant Zotero entry, extract:
+5. **Compile results**: For each relevant saved paper, extract:
    - Title, authors, year, venue
-   - User's annotations/highlights (if any)
+   - Processed notes or summaries (if any)
+   - User notes / reading annotations (if any)
    - Tags the user assigned
-   - Which collection it belongs to
 
-> 📚 Zotero annotations are gold — they show what the user personally highlighted as important, which is far more valuable than generic summaries.
+> 📚 Saved library notes are gold — they show what the user already read, saved, highlighted, or summarized, which is more valuable than generic summaries.
 
 ### Step 0b: Search Obsidian Vault (if available)
 
@@ -101,7 +103,7 @@ Before searching online, check if the user already has relevant papers locally:
    Glob: papers/**/*.pdf, literature/**/*.pdf
    ```
 
-2. **De-duplicate against Zotero**: If Step 0a found papers, skip any local PDFs already covered by Zotero results (match by filename or title).
+2. **De-duplicate against the saved library**: If Step 0a found papers, skip any local PDFs already covered by saved library results (match by filename or title).
 
 3. **Filter by relevance**: Match filenames and first-page content against the research topic. Skip clearly unrelated papers.
 
@@ -118,7 +120,7 @@ Before searching online, check if the user already has relevant papers locally:
 - Use WebSearch to find recent papers on the topic
 - Check arXiv, Semantic Scholar, Google Scholar
 - Focus on papers from last 2 years unless studying foundational work
-- **De-duplicate**: Skip papers already found in Zotero, Obsidian, or local library
+- **De-duplicate**: Skip papers already found in the saved library, Obsidian, or local library
 
 ### Step 2: Analyze Each Paper
 For each relevant paper (from all sources), extract:
@@ -126,7 +128,7 @@ For each relevant paper (from all sources), extract:
 - **Method**: Core technical contribution (1-2 sentences)
 - **Results**: Key numbers/claims
 - **Relevance**: How does it relate to our work?
-- **Source**: Where we found it (Zotero/Obsidian/local/web) — helps user know what they already have vs what's new
+- **Source**: Where we found it (Auto Researcher/Obsidian/local/web) — helps user know what they already have vs what's new
 
 ### Step 3: Synthesize
 - Group papers by approach/theme
@@ -144,7 +146,7 @@ Present as a structured literature table:
 
 Plus a narrative summary of the landscape (3-5 paragraphs).
 
-If Zotero BibTeX was exported, include a `references.bib` snippet for direct use in paper writing.
+If saved-library BibTeX was exported, include a `references.bib` snippet for direct use in paper writing.
 
 ### Step 5: Save (if requested)
 - Save paper PDFs to `literature/` or `papers/`
@@ -157,4 +159,4 @@ If Zotero BibTeX was exported, include a `references.bib` snippet for direct use
 - Be honest about limitations of each paper
 - Note if a paper directly competes with or supports our approach
 - **Never fail because a MCP server is not configured** — always fall back gracefully to the next data source
-- Zotero/Obsidian tools may have different names depending on how the user configured the MCP server (e.g., `mcp__zotero__search` or `mcp__zotero-mcp__search_items`). Try the most common patterns and adapt.
+- Auto Researcher/Zotero/Obsidian tools may have different names depending on how the user configured the MCP server. Prefer `mcp__auto-researcher__*`, but try Zotero-compatible patterns when needed.

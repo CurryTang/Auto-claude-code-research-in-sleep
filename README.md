@@ -461,6 +461,28 @@ Claude Code reads this and knows how to SSH in, activate the environment, and la
 
 </details>
 
+### 📚 Auto Researcher Library Integration (Optional)
+
+If you use [Auto Researcher](https://github.com/CurryTang/auto-researcher) to manage your paper library, `/research-lit` can search your saved papers, read processed notes and manual annotations, inspect reading history, and export BibTeX before searching the web.
+
+Run the MCP server from an Auto Researcher checkout:
+
+```bash
+cd /path/to/auto-researcher/backend
+npm install
+
+# Add to Claude Code
+claude mcp add auto-researcher -s project -- node /path/to/auto-researcher/backend/src/mcp/auto-researcher-mcp-server.js
+```
+
+**What it enables in `/research-lit`:**
+- 🔍 Search your saved Auto Researcher paper library by topic
+- 📝 Read processed paper notes, manual notes, and reading history
+- 🏷️ Use saved tags and metadata as relevance signals
+- 📄 Export BibTeX for direct use in paper writing
+
+**Compatibility note:** if you already have a Zotero-shaped setup, you can register the same server under the `zotero` MCP name and `/research-lit` will still work.
+
 ### 📚 Zotero Integration (Optional)
 
 If you use [Zotero](https://www.zotero.org/) to manage your paper library, `/research-lit` can search your collections, read your annotations/highlights, and export BibTeX — all before searching the web.
