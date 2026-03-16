@@ -1,8 +1,8 @@
 ---
 name: gpu-status
-description: Show GPU availability across all saved SSH servers. Use when user says "check GPUs", "which GPUs are free", "gpu status", "GPU 状态", or needs to know where to run experiments.
-argument-hint: [optional: specific server alias]
-allowed-tools: Bash(ssh *), Bash(echo *), Bash(cat *), Read, Grep, Glob
+description: Show GPU availability across all saved SSH servers for the current ARIS project. Use when user says "check GPUs", "which GPUs are free", "gpu status", "GPU 状态", or needs to know where to run experiments.
+argument-hint: [optional: project name or server name to filter]
+allowed-tools: Bash(ssh *), Bash(echo *), Bash(curl *), Read, Grep, Glob
 ---
 
 # GPU Status
@@ -11,35 +11,67 @@ Check GPU availability: $ARGUMENTS
 
 ## Workflow
 
-### Step 1: Discover Servers
+### Step 1: Discover Servers from ARIS Project Targets
 
-Read the project's `CLAUDE.md` (and any `AGENTS.md`) to find all configured SSH servers.
-Look for patterns like:
-- `ssh <alias>` or `SSH: ssh <alias>`
-- Server sections with GPU info
-- Remote server blocks
+Each ARIS project has saved SSH server targets via the Auto Researcher API. Query the API to get all projects and their targets.
 
-Also check `~/.ssh/config` for known hosts if no servers are found in project files:
+**List all ARIS projects:**
 ```bash
-cat ~/.ssh/config | grep -i "^Host " | grep -v "\*"
+curl -s http://localhost:3000/api/aris/projects | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+for p in data.get('projects', []):
+    print(f\"{p['id']}  {p['name']}\")
+"
 ```
 
-If `$ARGUMENTS` specifies a server, check only that server.
+If `$ARGUMENTS` names a specific project, filter to that project only.
+
+**Get targets for each project (or the specified one):**
+```bash
+curl -s http://localhost:3000/api/aris/projects/<projectId>/targets | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+for t in data.get('targets', []):
+    print(f\"{t['sshServerName']}  sshServerId={t['sshServerId']}  path={t['remoteProjectPath']}\")
+"
+```
+
+**Get SSH connection details for each server:**
+```bash
+curl -s http://localhost:3000/api/ssh-servers | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+for s in data.get('servers', data if isinstance(data, list) else []):
+    sid = s.get('id', '')
+    name = s.get('name', '')
+    host = s.get('host', '')
+    user = s.get('user', '')
+    port = s.get('port', 22)
+    jump = s.get('proxyJump', '') or s.get('proxy_jump', '')
+    key  = s.get('sshKeyPath', '') or s.get('ssh_key_path', '~/.ssh/id_rsa')
+    print(f'{sid}|{name}|{user}@{host}:{port}|jump={jump}|key={key}')
+"
+```
+
+Build the SSH command for each server. If `proxyJump` is set, use `-J <proxyJump>`. If `sshKeyPath` is set, use `-i <sshKeyPath>`.
 
 ### Step 2: Query Each Server
 
-For each discovered server, run `nvidia-smi` via SSH:
+For each target's SSH server, run `nvidia-smi` via SSH:
 
 ```bash
-ssh <server> "nvidia-smi --query-gpu=index,name,memory.used,memory.total,utilization.gpu,temperature.gpu --format=csv,noheader" 2>&1
+ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=no \
+    [-J <proxyJump>] [-i <sshKeyPath>] [-p <port>] \
+    <user>@<host> \
+    "nvidia-smi --query-gpu=index,name,memory.used,memory.total,utilization.gpu,temperature.gpu --format=csv,noheader" 2>&1
 ```
 
-If `nvidia-smi` is not found, try:
-```bash
-ssh <server> "/usr/bin/nvidia-smi --query-gpu=index,name,memory.used,memory.total,utilization.gpu,temperature.gpu --format=csv,noheader" 2>&1
-```
+If `nvidia-smi` is not found, try the full path `/usr/bin/nvidia-smi`.
 
-If the server is unreachable or has no GPUs, note it and move on.
+If the server is unreachable or has no GPUs, note it and move on to the next.
+
+Query all servers in **parallel** when possible (use multiple tool calls).
 
 ### Step 3: Determine Availability
 
@@ -55,25 +87,35 @@ A GPU is **busy** if:
 
 ### Step 4: Present Results
 
-Display a summary table per server:
+Group results by ARIS project, then by server. Display a table per server:
 
 ```
-## <server-alias>  (e.g. my-gpu-server)
+## Project: AutoRDL
+
+### papermachine  (chenzh85@papermachine.egr.msu.edu via scully)
 
 | GPU | Model       | VRAM Used   | VRAM Total | Util % | Temp | Status    |
 |-----|-------------|-------------|------------|--------|------|-----------|
-| 0   | A100-80GB   | 234 MiB     | 81920 MiB  | 0%     | 32C  | Free      |
-| 1   | A100-80GB   | 45321 MiB   | 81920 MiB  | 87%    | 71C  | Busy      |
-| 2   | A100-80GB   | 1200 MiB    | 81920 MiB  | 0%     | 35C  | Free      |
-| 3   | A100-80GB   | 40000 MiB   | 81920 MiB  | 45%    | 58C  | Partial   |
+| 0   | RTX A5000   | 234 MiB     | 24564 MiB  | 0%     | 32C  | Free      |
+| 1   | RTX A5000   | 22100 MiB   | 24564 MiB  | 87%    | 71C  | Busy      |
+| ...                                                                       |
+
+### lab-server  (user@lab.cs.university.edu)
+
+| GPU | Model       | VRAM Used   | VRAM Total | Util % | Temp | Status    |
+|-----|-------------|-------------|------------|--------|------|-----------|
+| ...                                                                       |
 ```
 
-Then a quick summary:
+Then a cross-project summary:
+
 ```
 ### Summary
-- my-gpu-server: 2 free, 1 partial, 1 busy (out of 4 GPUs)
-- lab-server:    8 free, 0 partial, 0 busy (out of 8 GPUs)
-Total free GPUs across all servers: 10
+AutoRDL (6 servers):
+  - papermachine: 5 free, 1 partial, 2 busy (8 GPUs)
+  - lab-server:   4 free, 0 partial, 0 busy (4 GPUs)
+  - ...
+Total free GPUs: 28
 ```
 
 ### Step 5: Recommend
@@ -90,4 +132,5 @@ Based on availability:
 - If SSH times out after 10 seconds, mark server as unreachable and continue
 - Run SSH commands with a timeout: `ssh -o ConnectTimeout=10 <server> ...`
 - Query all servers in parallel when possible (use multiple tool calls)
-- If no servers are configured anywhere, tell the user to add server info to their CLAUDE.md
+- If no ARIS projects or targets exist, tell the user to create a project and add SSH server targets in the Auto Researcher ARIS workspace
+- Deduplicate servers: if multiple projects share the same SSH server, only query it once but show the results under each project
