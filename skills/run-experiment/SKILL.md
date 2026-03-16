@@ -40,10 +40,27 @@ Free GPU = memory.used < 500 MiB.
 
 ### Step 3: Sync Code (Remote Only)
 
+Check the project's `CLAUDE.md` for a `code_sync` setting. If not specified, default to `rsync`.
+
+#### Option A: rsync (default)
+
 Only sync necessary files — NOT data, checkpoints, or large files:
 ```bash
 rsync -avz --include='*.py' --exclude='*' <local_src>/ <server>:<remote_dst>/
 ```
+
+#### Option B: git (when `code_sync: git` is set in CLAUDE.md)
+
+Push local changes to remote repo, then pull on the server:
+```bash
+# 1. Push from local
+git add -A && git commit -m "sync: experiment deployment" && git push
+
+# 2. Pull on server
+ssh <server> "cd <remote_dst> && git pull"
+```
+
+Benefits: version-tracked, multi-server sync with one push, no rsync include/exclude rules needed.
 
 ### Step 4: Deploy
 
@@ -104,6 +121,7 @@ Users should add their server info to their project's `CLAUDE.md`:
 - GPU: 4x A100 (80GB each)
 - Conda: `eval "$(/opt/conda/bin/conda shell.bash hook)" && conda activate research`
 - Code dir: `/home/user/experiments/`
+- code_sync: rsync          # default. Or set to "git" for git push/pull workflow
 
 ## Local Environment
 - Mac MPS / Linux CUDA
